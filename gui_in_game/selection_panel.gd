@@ -98,7 +98,7 @@ func _update_viewpoint(viewpoint: int) -> void:
 	_top_view.pressed = viewpoint == VoyagerCamera.VIEWPOINT_TOP
 
 func _change_camera_viewpoint(_button_pressed: bool, viewpoint: int) -> void:
-	_camera.move(null, viewpoint)
+	_camera.move(null, viewpoint, Vector3.ZERO)
 
 func _increment_focal_length(increment: int) -> void:
 	_camera.increment_focal_length(increment)
