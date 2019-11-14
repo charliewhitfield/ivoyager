@@ -103,6 +103,7 @@ var init_focal_length_index := 2
 var ease_exponent := 5.0
 var move_radially_rate := 0.7
 var move_in_out_rate := 3.0
+var key_rotate_rate := 1.0
 var follow_orbit: float = 4e7 * Global.scale # km after dividing by fov
 var orient_to_local_pole: float = 5e7 * Global.scale # must be > follow_orbit
 var orient_to_ecliptic: float = 5e10 * Global.scale # must be > orient_to_local_pole
@@ -441,7 +442,6 @@ func _process_not_moving(delta: float, is_dist_change := false) -> void:
 		move_vector += _move_action_pressed * delta
 	if _rotate_action_pressed:
 		rotate_vector += _rotate_action_pressed * delta
-	
 	if move_vector:
 		_move_camera_origin(move_vector)
 		is_dist_change = true
@@ -495,9 +495,13 @@ func _move_camera_origin(move_vector: Vector3) -> void:
 	_transform.origin = origin
 
 func _rotate_camera(rotate_vector: Vector3) -> void:
-	pass
-	
-
+	var self_basis := _transform.basis
+	if rotate_vector.x:
+		_rotation = _rotation.rotated(self_basis.x, rotate_vector.x)
+	if rotate_vector.y:
+		_rotation = _rotation.rotated(self_basis.y, rotate_vector.y)
+	if rotate_vector.z:
+		_rotation = _rotation.rotated(self_basis.z, rotate_vector.z)
 
 func _get_viewpoint_transform(selection_item_: SelectionItem, viewpoint_: int, rotation_: Basis, view_position := Vector3.ZERO) -> Transform:
 	if !view_position:
@@ -614,6 +618,8 @@ func _on_unhandled_input(event: InputEvent) -> void:
 				move(null, VIEWPOINT_45, NO_ROTATION, false)
 			elif event.is_action_pressed("camera_top_view"):
 				move(null, VIEWPOINT_TOP, NO_ROTATION, false)
+			elif event.is_action_pressed("recenter"):
+				move(null, -1, NO_ROTATION, false)
 			elif event.is_action_pressed("camera_left"):
 				_move_action_pressed.x = -1.0
 			elif event.is_action_pressed("camera_right"):
@@ -626,6 +632,18 @@ func _on_unhandled_input(event: InputEvent) -> void:
 				_move_action_pressed.z = -1.0
 			elif event.is_action_pressed("camera_out"):
 				_move_action_pressed.z = 1.0
+			elif event.is_action_pressed("pitch_up"):
+				_rotate_action_pressed.x = key_rotate_rate
+			elif event.is_action_pressed("pitch_down"):
+				_rotate_action_pressed.x = -key_rotate_rate
+			elif event.is_action_pressed("yaw_left"):
+				_rotate_action_pressed.y = key_rotate_rate
+			elif event.is_action_pressed("yaw_right"):
+				_rotate_action_pressed.y = -key_rotate_rate
+			elif event.is_action_pressed("roll_left"):
+				_rotate_action_pressed.z = -key_rotate_rate
+			elif event.is_action_pressed("roll_right"):
+				_rotate_action_pressed.z = key_rotate_rate
 			else:
 				return  # no input handled
 		else: # key release
@@ -641,6 +659,18 @@ func _on_unhandled_input(event: InputEvent) -> void:
 				_move_action_pressed.z = 0.0
 			elif event.is_action_released("camera_out"):
 				_move_action_pressed.z = 0.0
+			elif event.is_action_released("pitch_up"):
+				_rotate_action_pressed.x = 0.0
+			elif event.is_action_released("pitch_down"):
+				_rotate_action_pressed.x = 0.0
+			elif event.is_action_released("yaw_left"):
+				_rotate_action_pressed.y = 0.0
+			elif event.is_action_released("yaw_right"):
+				_rotate_action_pressed.y = 0.0
+			elif event.is_action_released("roll_left"):
+				_rotate_action_pressed.z = 0.0
+			elif event.is_action_released("roll_right"):
+				_rotate_action_pressed.z = 0.0
 			else:
 				return  # no input handled
 		is_handled = true
