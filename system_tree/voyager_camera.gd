@@ -466,17 +466,7 @@ func _process_not_moving(delta: float, is_dist_change := false) -> void:
 	if is_rotation_change:
 		var north := _get_north(selection_item, dist_sq)
 		_transform = _transform.looking_at(-_transform.origin, north)
-#		_transform.basis = Basis(_rotations) * _transform.basis
 		_transform.basis = _apply_rotations(_transform.basis, _rotations)
-#		_transform.basis = _rotation * _transform.basis
-
-static func _apply_rotations(basis: Basis, rotations: Vector3) -> Basis:
-	basis = basis.rotated(basis.z, rotations.z)
-	basis = basis.rotated(basis.x, rotations.x)
-	basis = basis.rotated(basis.y, rotations.y)
-	return basis
-
-
 
 func _move_camera_origin(move_vector: Vector3) -> void:
 	move_vector = Basis(_rotations) * move_vector
@@ -503,21 +493,75 @@ func _move_camera_origin(move_vector: Vector3) -> void:
 	origin = origin.normalized() * sqrt(dist_sq) # FIXME optimize
 	_transform.origin = origin
 
-func _rotate_camera(rotate_vector: Vector3) -> void:
-#	var basis := _transform.basis
-#	var new_basis := _apply_rotations(basis, rotate_vector)
-#	var diff := new_basis.get_euler() - basis.get_euler()
-#	_rotations += diff
+func _rotate_camera(delta_rotations: Vector3) -> void:
 	
-	_rotations += rotate_vector
+	_get_rotations()
+	var add_rotations := Vector3.ZERO
 	
-#	var self_basis := _transform.basis
-#	if rotate_vector.x:
-#		_rotation = _rotation.rotated(self_basis.x, rotate_vector.x)
-#	if rotate_vector.y:
-#		_rotation = _rotation.rotated(self_basis.y, rotate_vector.y)
-#	if rotate_vector.z:
-#		_rotation = _rotation.rotated(self_basis.z, rotate_vector.z)
+#	add_rotations.z = delta_rotations.z
+#	add_rotations.y = delta_rotations.y * cos(_rotations.z)
+#	add_rotations.x = delta_rotations.y * -sin(_rotations.z)
+	
+	add_rotations = delta_rotations
+	
+	_rotations.x = wrapf(_rotations.x + add_rotations.x, -PI, PI)
+	_rotations.y = wrapf(_rotations.y + add_rotations.y, -PI, PI)
+	_rotations.z = wrapf(_rotations.z + add_rotations.z, -PI, PI)
+
+static func _apply_rotations(basis: Basis, rotations: Vector3) -> Basis:
+#	basis = basis.rotated(basis.z, rotations.z)
+	basis = basis.rotated(basis.x, rotations.x)
+	basis = basis.rotated(basis.y, rotations.y)
+	basis = basis.rotated(basis.z, rotations.z)
+	return basis
+
+func _get_rotations() -> Vector3:
+	# Holly molly! This was a week of my life...
+	var dist_sq := _transform.origin.length_squared()
+	var north := _get_north(selection_item, dist_sq)
+	var ref_transform := _transform.looking_at(-_transform.origin, north)
+	var ref_basis := ref_transform.basis
+	var basis := _transform.basis
+	var test_y := basis.z.cross(ref_basis.x)
+	
+	var fx := test_y.dot(basis.x) < 0.0
+	var fy := test_y.dot(basis.y) < 0.0
+#	if !fx and fy:
+#		test_y = -test_y
+	var z_rotation := test_y.angle_to(basis.y)
+
+	z_rotation *= sign(test_y.dot(basis.x))
+	prints(Vector2(_rotations.z, z_rotation), fx, fy)
+
+	
+#	test_y *= sign(test_y.dot(basis.y)) # fails on z rotation up-side-down
+#	test_y *= sign(test_y.dot(ref_basis.y))
+#	test_y *= sign(basis.x.dot(ref_basis.x))
+#	test_y *= sign(basis.y.dot(ref_basis.y))
+#	test_y *= sign(basis.z.dot(ref_basis.z))
+#	var z_rotation = test_y.angle_to(basis.y)
+	
+	
+	basis = basis.rotated(basis.z, -z_rotation)
+	
+	var test_x := basis.y.cross(ref_basis.z)
+	test_x = ref_basis.x
+#	test_x *= sign(basis.y.dot(test_y))
+#	test_x *= sign(test_y.dot(ref_basis.y))
+#	test_x *= sign(basis.z.dot(ref_basis.z))
+#	test_x *= sign(basis.y.dot(ref_basis.y))
+	var y_rotation = test_x.angle_to(basis.x)
+	y_rotation *= sign(ref_basis.x.dot(basis.z))
+	
+	
+	
+#	prints(
+#		Vector2(_rotations.z, z_rotation)
+##		Vector2(_rotations.y, y_rotation)
+#		)
+	
+
+	return Vector3()
 
 func _get_viewpoint_transform(selection_item_: SelectionItem, viewpoint_: int, rotations_: Vector3, view_position := Vector3.ZERO) -> Transform:
 	if !view_position:
