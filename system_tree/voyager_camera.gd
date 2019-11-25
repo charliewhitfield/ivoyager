@@ -383,11 +383,6 @@ func _process_moving() -> void:
 	_transform.origin = interpolated_common_translation + global_common_translation - spatial.global_transform.origin
 	_transform.basis = from_transform.basis.slerp(to_transform.basis, ease_progress)
 
-
-#	var true_global_transform := from_transform.interpolate_with(to_transform, ease_progress)
-#	_transform.basis = true_global_transform.basis
-#	_transform.origin = true_global_transform.origin - spatial.global_transform.origin
-
 	var distance_for_gui: float
 	if spatial == _to_spatial:
 		distance_for_gui = translation.length()
@@ -426,9 +421,13 @@ func _process_not_moving(delta: float, is_dist_change := false) -> void:
 		move_vector += _move_action_pressed * delta
 	if _rotate_action_pressed:
 		rotate_vector += _rotate_action_pressed * delta
-	if move_vector:
-		_move_camera_origin(move_vector)
+	if move_vector.z:
+		_move_camera_radially(move_vector.z)
 		is_dist_change = true
+		is_camera_bump = true
+	if move_vector.x or move_vector.y:
+		_move_camera_tangentially(move_vector)
+		is_rotation_change = true
 		is_camera_bump = true
 	if rotate_vector:
 		_rotate_camera(rotate_vector)
@@ -451,13 +450,26 @@ func _process_not_moving(delta: float, is_dist_change := false) -> void:
 	if is_rotation_change:
 		var north := _get_north(selection_item, dist_sq)
 		_transform = _transform.looking_at(-_transform.origin, north)
-		_transform.basis = _apply_rotations(_transform.basis, _rotations)
+		_transform.basis *= Basis(_rotations)
 
-func _move_camera_origin(move_vector: Vector3) -> void:
-	move_vector = Basis(_rotations) * move_vector
+func _move_camera_radially(radial_movement: float) -> void:
 	var origin := _transform.origin
 	var dist_sq := origin.length_squared()
-	# radial
+	dist_sq *= 1.0 + radial_movement * move_in_out_rate
+	if dist_sq > _max_dist_sq:
+		dist_sq = _max_dist_sq
+	elif dist_sq < _min_dist_sq:
+		dist_sq = _min_dist_sq
+	origin = origin.normalized() * sqrt(dist_sq)
+	_transform.origin = origin
+
+func _move_camera_tangentially(move_vector: Vector3) -> void:
+	# We're only interested in tangental compenents (x & y) but we need a
+	# Vector3 for 3D rotations.
+	move_vector.z = 0.0
+	move_vector = Basis(_rotations) * move_vector # any resulting z is ignored
+	var origin := _transform.origin
+	var dist_sq := origin.length_squared()
 	var north := _get_north(selection_item, dist_sq)
 	var angle_to_pole := origin.angle_to(north)
 	var old_angle_to_pole := angle_to_pole
@@ -469,13 +481,6 @@ func _move_camera_origin(move_vector: Vector3) -> void:
 	var x_axis := north.cross(origin).normalized()
 	origin = origin.rotated(x_axis, angle_to_pole - old_angle_to_pole)
 	origin = origin.rotated(north, move_vector.x * move_radially_rate)
-	# in-out
-	dist_sq *= 1.0 + move_vector.z * move_in_out_rate
-	if dist_sq > _max_dist_sq:
-		dist_sq = _max_dist_sq
-	elif dist_sq < _min_dist_sq:
-		dist_sq = _min_dist_sq
-	origin = origin.normalized() * sqrt(dist_sq) # FIXME optimize
 	_transform.origin = origin
 
 func _rotate_camera(delta_rotations: Vector3) -> void:
@@ -483,74 +488,7 @@ func _rotate_camera(delta_rotations: Vector3) -> void:
 	basis = basis.rotated(basis.x, delta_rotations.x)
 	basis = basis.rotated(basis.y, delta_rotations.y)
 	basis = basis.rotated(basis.z, delta_rotations.z)
-	
-	
-	
 	_rotations = basis.get_euler()
-
-
-#	var add_rotations := Vector3.ZERO
-#	add_rotations = delta_rotations
-#	_rotations.x = wrapf(_rotations.x + add_rotations.x, -PI, PI)
-#	_rotations.y = wrapf(_rotations.y + add_rotations.y, -PI, PI)
-#	_rotations.z = wrapf(_rotations.z + add_rotations.z, -PI, PI)
-
-static func _apply_rotations(basis: Basis, rotations: Vector3) -> Basis:
-	return basis * Basis(rotations)
-
-	
-#	basis = basis.rotated(basis.x, rotations.x)
-#	basis = basis.rotated(basis.y, rotations.y)
-#	basis = basis.rotated(basis.z, rotations.z)
-#	return basis
-
-func _get_rotations() -> Vector3:
-	# Holly molly! This was a week of my life...
-	var dist_sq := _transform.origin.length_squared()
-	var north := _get_north(selection_item, dist_sq)
-	var ref_transform := _transform.looking_at(-_transform.origin, north)
-	var ref_basis := ref_transform.basis
-	var basis := _transform.basis
-	var test_y := basis.z.cross(ref_basis.x)
-	
-	var fx := test_y.dot(basis.x) < 0.0
-	var fy := test_y.dot(basis.y) < 0.0
-#	if !fx and fy:
-#		test_y = -test_y
-	var z_rotation := test_y.angle_to(basis.y)
-
-	z_rotation *= sign(test_y.dot(basis.x))
-	prints(Vector2(_rotations.z, z_rotation), fx, fy)
-
-	
-#	test_y *= sign(test_y.dot(basis.y)) # fails on z rotation up-side-down
-#	test_y *= sign(test_y.dot(ref_basis.y))
-#	test_y *= sign(basis.x.dot(ref_basis.x))
-#	test_y *= sign(basis.y.dot(ref_basis.y))
-#	test_y *= sign(basis.z.dot(ref_basis.z))
-#	var z_rotation = test_y.angle_to(basis.y)
-	
-	
-	basis = basis.rotated(basis.z, -z_rotation)
-	
-	var test_x := basis.y.cross(ref_basis.z)
-	test_x = ref_basis.x
-#	test_x *= sign(basis.y.dot(test_y))
-#	test_x *= sign(test_y.dot(ref_basis.y))
-#	test_x *= sign(basis.z.dot(ref_basis.z))
-#	test_x *= sign(basis.y.dot(ref_basis.y))
-	var y_rotation = test_x.angle_to(basis.x)
-	y_rotation *= sign(ref_basis.x.dot(basis.z))
-	
-	
-	
-#	prints(
-#		Vector2(_rotations.z, z_rotation)
-##		Vector2(_rotations.y, y_rotation)
-#		)
-	
-
-	return Vector3()
 
 func _get_viewpoint_transform(selection_item_: SelectionItem, viewpoint_: int, rotations_: Vector3, view_position := Vector3.ZERO) -> Transform:
 	if !view_position:
@@ -569,8 +507,7 @@ func _get_viewpoint_transform(selection_item_: SelectionItem, viewpoint_: int, r
 		viewpoint_translation = convert_view_position(view_position, north, orbit_anomaly)
 	_last_anomaly = orbit_anomaly
 	var viewpoint_transform := Transform(Basis(), viewpoint_translation).looking_at(-viewpoint_translation, north)
-	viewpoint_transform.basis = _apply_rotations(viewpoint_transform.basis, rotations_)
-#	viewpoint_transform.basis = Basis(rotations_) * viewpoint_transform.basis
+	viewpoint_transform.basis *= Basis(rotations_)
 	return viewpoint_transform
 
 func _get_viewpoint_view_position(selection_item_: SelectionItem, viewpoint_: int) -> Vector3:
