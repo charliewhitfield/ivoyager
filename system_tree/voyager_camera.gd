@@ -16,21 +16,6 @@
 # limitations under the License.
 # *****************************************************************************
 #
-# The camera has three modes [planned]:
-#   Inward - looking at spatial; move around and in/out
-#   [TODO] Outward - looking out from surface of body; zoom changes focal-length
-#   [TODO] Free - free to move anywhere; nearby bodies determine scale
-#
-# INWARD MODE
-# The camera is bound to a spatial object such as a star, planet, moon, minor
-# body or spacecraft. User can move about the object or in/out keeping
-# object always in center view. The camera will reorient on its own to
-# system ecliptic (when far) or a nearby object's equatorial plane.
-# Default key control:
-#   arrows - up, down, left, right around spatial maintaining pointing
-#   z, x - move camera away or tosward object
-# OUTWARD MODE - TODO
-# FREE MODE - TODO
 
 extends Camera
 class_name VoyagerCamera
@@ -494,26 +479,30 @@ func _move_camera_origin(move_vector: Vector3) -> void:
 	_transform.origin = origin
 
 func _rotate_camera(delta_rotations: Vector3) -> void:
+	var basis := Basis(_rotations)
+	basis = basis.rotated(basis.x, delta_rotations.x)
+	basis = basis.rotated(basis.y, delta_rotations.y)
+	basis = basis.rotated(basis.z, delta_rotations.z)
 	
-	_get_rotations()
-	var add_rotations := Vector3.ZERO
 	
-#	add_rotations.z = delta_rotations.z
-#	add_rotations.y = delta_rotations.y * cos(_rotations.z)
-#	add_rotations.x = delta_rotations.y * -sin(_rotations.z)
 	
-	add_rotations = delta_rotations
-	
-	_rotations.x = wrapf(_rotations.x + add_rotations.x, -PI, PI)
-	_rotations.y = wrapf(_rotations.y + add_rotations.y, -PI, PI)
-	_rotations.z = wrapf(_rotations.z + add_rotations.z, -PI, PI)
+	_rotations = basis.get_euler()
+
+
+#	var add_rotations := Vector3.ZERO
+#	add_rotations = delta_rotations
+#	_rotations.x = wrapf(_rotations.x + add_rotations.x, -PI, PI)
+#	_rotations.y = wrapf(_rotations.y + add_rotations.y, -PI, PI)
+#	_rotations.z = wrapf(_rotations.z + add_rotations.z, -PI, PI)
 
 static func _apply_rotations(basis: Basis, rotations: Vector3) -> Basis:
+	return basis * Basis(rotations)
+
+	
+#	basis = basis.rotated(basis.x, rotations.x)
+#	basis = basis.rotated(basis.y, rotations.y)
 #	basis = basis.rotated(basis.z, rotations.z)
-	basis = basis.rotated(basis.x, rotations.x)
-	basis = basis.rotated(basis.y, rotations.y)
-	basis = basis.rotated(basis.z, rotations.z)
-	return basis
+#	return basis
 
 func _get_rotations() -> Vector3:
 	# Holly molly! This was a week of my life...
