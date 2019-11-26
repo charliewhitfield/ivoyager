@@ -91,7 +91,11 @@ var key_rotate_rate := 1.0
 var follow_orbit: float = 4e7 * Global.scale # km after dividing by fov
 var orient_to_local_pole: float = 5e7 * Global.scale # must be > follow_orbit
 var orient_to_ecliptic: float = 5e10 * Global.scale # must be > orient_to_local_pole
-var mouse_drag_incr := PI / 8.0
+var mouse_move_effect := 0.4
+var mouse_rotate_xy_effect := 0.1 
+var mouse_rotate_z_effect := 0.3
+var mouse_rotate_min_z_at_offcenter := 0.2
+var mouse_rotate_max_z_at_offcenter := 0.7
 var mouse_wheel_halflife_x2 := 0.25 # sec
 var mouse_wheel_effect := 100 # int!
 
@@ -116,9 +120,13 @@ var _mouse_wheel_accumulator := 0
 var _move_action_pressed := Vector3.ZERO
 var _rotate_action_pressed := Vector3.ZERO
 
-var _drag_start := NULL_DRAG
-var _drag_segment_start := NULL_DRAG
-var _drag_current := NULL_DRAG
+var _drag_lb_start := NULL_DRAG
+var _drag_lb_segment_start := NULL_DRAG
+var _drag_lb_current := NULL_DRAG
+var _drag_rb_start := NULL_DRAG
+var _drag_rb_segment_start := NULL_DRAG
+var _drag_rb_current := NULL_DRAG
+#var _drag_is_z_rotate := false
 # move
 var _move_seconds: float
 var _move_progress: float
@@ -404,11 +412,24 @@ func _process_not_moving(delta: float, is_dist_change := false) -> void:
 	var move_vector := Vector3.ZERO
 	var rotate_vector := Vector3.ZERO
 	# mouse drag movement
-	if _drag_segment_start and _drag_segment_start != _drag_current:
-		var mouse_move := (_drag_current - _drag_segment_start) * delta * mouse_drag_incr
-		_drag_segment_start = _drag_current
+	if _drag_lb_segment_start and _drag_lb_segment_start != _drag_lb_current:
+		var mouse_move := (_drag_lb_current - _drag_lb_segment_start) * delta * mouse_move_effect
+		_drag_lb_segment_start = _drag_lb_current
 		move_vector.x = -mouse_move.x
 		move_vector.y = mouse_move.y
+	if _drag_rb_segment_start and _drag_rb_segment_start != _drag_rb_current:
+		var mouse_rotate := (_drag_rb_current - _drag_rb_segment_start) * delta
+		_drag_rb_segment_start = _drag_rb_current
+		# Mouse offset from center at start of drag determines amount of z-rotation vs xy-rotation
+		var z_proportion := (2.0 * _drag_rb_start - _viewport.size).length() / _viewport.size.x
+		z_proportion -= mouse_rotate_min_z_at_offcenter
+		z_proportion /= mouse_rotate_max_z_at_offcenter - mouse_rotate_min_z_at_offcenter
+		z_proportion = clamp(z_proportion, 0.0, 1.0)
+		var center_to_mouse := (_drag_rb_segment_start - _viewport.size / 2.0).normalized()
+		rotate_vector.z = center_to_mouse.cross(mouse_rotate) * mouse_rotate_z_effect * z_proportion
+		mouse_rotate *= mouse_rotate_xy_effect * (1.0 - z_proportion)
+		rotate_vector.x = mouse_rotate.y
+		rotate_vector.y = mouse_rotate.x
 	# mouse wheel zooming
 	if _mouse_wheel_accumulator != 0:
 		var use_now := int(_mouse_wheel_accumulator * delta / mouse_wheel_halflife_x2)
@@ -580,22 +601,37 @@ func _on_unhandled_input(event: InputEvent) -> void:
 		# start/stop mouse drag or process a mouse click
 		elif event.button_index == BUTTON_LEFT:
 			if event.pressed:
-				_drag_start = _viewport.get_mouse_position()
-				_drag_segment_start = _drag_start
-				_drag_current = _drag_start
+				_drag_lb_start = _viewport.get_mouse_position()
+				_drag_lb_segment_start = _drag_lb_start
+				_drag_lb_current = _drag_lb_start
 			else:
-				if _drag_start == _drag_current: # it was a mouse click, not drag movement
+				if _drag_lb_start == _drag_lb_current: # it was a mouse click, not drag movement
 					Global.emit_signal("mouse_clicked_viewport_at", event.position, self, true)
-				_drag_start = NULL_DRAG
-				_drag_segment_start = NULL_DRAG
+				_drag_lb_start = NULL_DRAG
+				_drag_lb_segment_start = NULL_DRAG
 			is_handled = true
 		elif event.button_index == BUTTON_RIGHT:
-			Global.emit_signal("mouse_clicked_viewport_at", event.position, self, false)
+			if event.pressed:
+				_drag_rb_start = _viewport.get_mouse_position()
+				_drag_rb_segment_start = _drag_rb_start
+				_drag_rb_current = _drag_rb_start
+#				var offcenter_length := (_drag_rb_start - _viewport.size / 2.0).length()
+#				if offcenter_length / _viewport.size.y > mouse_rotate_z_at_screen_proportion:
+#					_drag_is_z_rotate = true
+			else:
+				if _drag_rb_start == _drag_rb_current: # it was a mouse click, not drag movement
+					Global.emit_signal("mouse_clicked_viewport_at", event.position, self, false)
+				_drag_rb_start = NULL_DRAG
+				_drag_rb_segment_start = NULL_DRAG
+#				_drag_is_z_rotate = false
 			is_handled = true
 	elif event is InputEventMouseMotion:
 		# accumulate mouse drag motion
-		if _drag_segment_start:
-			_drag_current = _viewport.get_mouse_position()
+		if _drag_lb_segment_start:
+			_drag_lb_current = _viewport.get_mouse_position()
+			is_handled = true
+		if _drag_rb_segment_start:
+			_drag_rb_current = _viewport.get_mouse_position()
 			is_handled = true
 	elif event.is_action_type():
 		if event.is_pressed():

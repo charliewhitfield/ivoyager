@@ -53,6 +53,7 @@ func _on_ready() -> void:
 	_top_view.connect("toggled", self, "_change_camera_viewpoint", [VoyagerCamera.VIEWPOINT_TOP])
 	_fov_decr.connect("pressed", self, "_increment_focal_length", [-1])
 	_fov_incr.connect("pressed", self, "_increment_focal_length", [1])
+	_selection_image.connect("gui_input", self, "_on_selection_image_gui_input")
 	get_parent().selection_manager.connect("selection_changed", self, "_update_selection")
 	_connect_camera(get_viewport().get_camera())
 
@@ -102,3 +103,8 @@ func _change_camera_viewpoint(_button_pressed: bool, viewpoint: int) -> void:
 
 func _increment_focal_length(increment: int) -> void:
 	_camera.increment_focal_length(increment)
+	
+func _on_selection_image_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == BUTTON_LEFT:
+		var selection_manager: SelectionManager = get_parent().selection_manager
+		Global.emit_signal("move_camera_to_selection_requested", selection_manager.selection_item, -1, Vector3.ZERO)
